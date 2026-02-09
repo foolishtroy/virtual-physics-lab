@@ -12,61 +12,48 @@ const PendulumSimulation = () => {
   const MASS = 1;   // kg
   
   // Simulation State
-  // angle is in radians. 0 is straight down.
   const [angle, setAngle] = useState(Math.PI / 4); 
   const [omega, setOmega] = useState(0);
-  
-  // Slider State (for UI sync) - stored in degrees for the input
   const [sliderValue, setSliderValue] = useState(45);
 
-  // We store the "Reference Energy" - the total energy the system SHOULD have.
   const referenceEnergy = useRef(null);
-  
-  // Refs for animation loop
   const requestRef = useRef();
   const previousTimeRef = useRef();
   const stateRef = useRef({ angle: Math.PI / 4, omega: 0 });
 
-  // --- Physics Engine (Energy Corrected) ---
+  // --- Physics Engine ---
   const updatePhysics = useCallback((deltaTime) => {
     let { angle: currentAngle, omega: currentOmega } = stateRef.current;
     
-    // 1. Standard Gravity Step (Integration)
-    // Angular acceleration = - (g/L) * sin(theta)
+    // Angular acceleration
     const alpha = -(GRAVITY / LENGTH) * Math.sin(currentAngle);
     
     let nextOmega = currentOmega + alpha * deltaTime;
     let nextAngle = currentAngle + nextOmega * deltaTime;
 
-    // 2. ENERGY CORRECTION (The "Artificial Freeze")
+    // Energy Correction
     const getHeight = (theta) => LENGTH * (1 - Math.cos(theta));
     const h_current = getHeight(nextAngle);
     const pe_current = MASS * GRAVITY * h_current;
 
-    // Initialize Reference Energy if needed
     if (referenceEnergy.current === null) {
       const v_initial = nextOmega * LENGTH;
       const ke_initial = 0.5 * MASS * v_initial * v_initial;
       referenceEnergy.current = pe_current + ke_initial;
     }
 
-    // 3. Force Conservation
     const targetTotal = referenceEnergy.current;
     let requiredKE = targetTotal - pe_current;
 
-    // Clamp for floating point errors or overshooting max height
     if (requiredKE < 0) {
       requiredKE = 0;
       nextOmega = 0;
     } else {
-      // Reverse engineer velocity from Energy
-      // KE = 1/2 m v^2  ->  v = sqrt(2*KE/m)
       const requiredVel = Math.sqrt((2 * requiredKE) / MASS);
       const requiredOmegaMag = requiredVel / LENGTH;
       
-      // Apply magnitude, keep direction
       if (Math.abs(nextOmega) < 0.0001) {
-         // do nothing, let gravity pull it back
+         // turning point
       } else {
          nextOmega = Math.sign(nextOmega) * requiredOmegaMag;
       }
@@ -75,8 +62,6 @@ const PendulumSimulation = () => {
     stateRef.current = { angle: nextAngle, omega: nextOmega };
     setAngle(nextAngle);
     setOmega(nextOmega);
-    
-    // Update slider to match animation
     setSliderValue(nextAngle * (180 / Math.PI));
 
   }, []);
@@ -86,7 +71,7 @@ const PendulumSimulation = () => {
     if (previousTimeRef.current !== undefined) {
       const deltaTime = (time - previousTimeRef.current) / 1000;
       const timeScale = slowMo ? 0.2 : 1.0;
-      const steps = 4; // Sub-steps for smoothness
+      const steps = 4;
       const stepTime = (deltaTime * timeScale) / steps;
       
       for (let i = 0; i < steps; i++) {
@@ -107,21 +92,15 @@ const PendulumSimulation = () => {
     return () => cancelAnimationFrame(requestRef.current);
   }, [isPlaying, slowMo, updatePhysics]);
 
-
   // --- Controls ---
   const handleSliderChange = (e) => {
     setIsPlaying(false);
-    
     const deg = parseFloat(e.target.value);
     setSliderValue(deg);
-    
     const rad = deg * (Math.PI / 180);
     setAngle(rad);
     setOmega(0);
-    
     stateRef.current = { angle: rad, omega: 0 };
-    
-    // Reset Reference Energy immediately based on slider position
     const h = LENGTH * (1 - Math.cos(rad));
     referenceEnergy.current = MASS * GRAVITY * h;
   };
@@ -133,7 +112,6 @@ const PendulumSimulation = () => {
     setAngle(rad);
     setOmega(0);
     stateRef.current = { angle: rad, omega: 0 };
-    
     const h = LENGTH * (1 - Math.cos(rad));
     referenceEnergy.current = MASS * GRAVITY * h;
   };
@@ -142,7 +120,6 @@ const PendulumSimulation = () => {
   const currentHeight = LENGTH * (1 - Math.cos(angle));
   const currentPE = MASS * GRAVITY * currentHeight;
   
-  // Calculate Total Energy
   let currentTotal = referenceEnergy.current;
   if (!isPlaying || currentTotal === null) {
       currentTotal = currentPE;
@@ -152,106 +129,239 @@ const PendulumSimulation = () => {
   let currentKE = currentTotal - currentPE;
   if (currentKE < 0.01) currentKE = 0; 
 
-  // --- Scaling Logic ---
-  // Max height is at 90 degrees = LENGTH.
-  // Max Energy = m * g * LENGTH
   const MAX_POSSIBLE_ENERGY = MASS * GRAVITY * LENGTH; 
-  
   const getBarWidth = (energy) => {
-      // Calculate percentage against the absolute max energy (90 degrees)
       const percent = (energy / MAX_POSSIBLE_ENERGY) * 100;
       return Math.min(100, Math.max(0, percent));
   };
 
-  // SVG Coordinates
-  const pivotX = 0;
-  const pivotY = 0;
   const bobX = Math.sin(angle) * 250; 
   const bobY = Math.cos(angle) * 250;
 
+  // --- Styles ---
+  const styles = {
+    container: {
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      maxWidth: '900px',
+      margin: '0 auto',
+      padding: '20px',
+      backgroundColor: '#f8fafc',
+      borderRadius: '12px',
+      border: '1px solid #e2e8f0',
+      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+    },
+    header: {
+      textAlign: 'center',
+      marginBottom: '20px',
+    },
+    title: {
+      fontSize: '24px',
+      fontWeight: 'bold',
+      color: '#1e293b',
+      margin: '0 0 8px 0',
+    },
+    subtitle: {
+      color: '#64748b',
+      margin: 0,
+    },
+    mainLayout: {
+      display: 'flex',
+      flexDirection: 'row',
+      gap: '24px',
+      flexWrap: 'wrap',
+    },
+    simBox: {
+      flex: '1',
+      minWidth: '300px',
+      backgroundColor: 'white',
+      borderRadius: '8px',
+      border: '1px solid #e2e8f0',
+      height: '320px',
+      position: 'relative',
+      overflow: 'hidden',
+    },
+    graphBox: {
+      width: '250px',
+      flexShrink: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      gap: '16px',
+      padding: '16px',
+      backgroundColor: 'white',
+      borderRadius: '8px',
+      border: '1px solid #e2e8f0',
+    },
+    labelRow: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      fontSize: '12px',
+      fontWeight: 'bold',
+      color: '#334155',
+      marginBottom: '4px',
+      textTransform: 'uppercase',
+    },
+    barContainer: {
+      width: '100%',
+      height: '32px',
+      backgroundColor: '#f1f5f9',
+      borderRadius: '6px',
+      overflow: 'hidden',
+      border: '1px solid #e2e8f0',
+      position: 'relative',
+    },
+    bar: {
+      height: '100%',
+      transition: 'width 0.1s linear',
+    },
+    controls: {
+      marginTop: '24px',
+      padding: '16px',
+      backgroundColor: 'white',
+      borderRadius: '8px',
+      border: '1px solid #e2e8f0',
+    },
+    sliderContainer: {
+      marginBottom: '16px',
+    },
+    sliderLabel: {
+      display: 'block',
+      fontSize: '14px',
+      fontWeight: '600',
+      color: '#334155',
+      marginBottom: '8px',
+    },
+    slider: {
+      width: '100%',
+      height: '8px',
+      backgroundColor: '#e2e8f0',
+      borderRadius: '4px',
+      outline: 'none',
+      cursor: 'pointer',
+    },
+    buttonRow: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderTop: '1px solid #f1f5f9',
+      paddingTop: '16px',
+    },
+    btnGroup: {
+      display: 'flex',
+      gap: '12px',
+    },
+    playBtn: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      padding: '12px 24px',
+      borderRadius: '8px',
+      border: 'none',
+      color: 'white',
+      fontWeight: 'bold',
+      cursor: 'pointer',
+      backgroundColor: isPlaying ? '#f59e0b' : '#2563eb',
+    },
+    resetBtn: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      padding: '12px 16px',
+      borderRadius: '8px',
+      border: '2px solid #e2e8f0',
+      backgroundColor: 'white',
+      color: '#334155',
+      fontWeight: '600',
+      cursor: 'pointer',
+    },
+    checkboxWrapper: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      padding: '8px 12px',
+      backgroundColor: '#f8fafc',
+      borderRadius: '8px',
+      border: '1px solid #e2e8f0',
+    }
+  };
+
   return (
-    <div className="flex flex-col items-center w-full max-w-4xl mx-auto p-4 md:p-6 bg-slate-50 rounded-xl shadow-lg border border-slate-200 font-sans touch-manipulation">
+    <div style={styles.container}>
       
-      <div className="mb-4 text-center">
-        <h2 className="text-2xl font-bold text-slate-800">Conservation of Energy</h2>
-        <p className="text-slate-600 text-sm md:text-base">Use the slider to set the starting height.</p>
+      <div style={styles.header}>
+        <h2 style={styles.title}>Conservation of Energy</h2>
+        <p style={styles.subtitle}>Use the slider to set the starting height.</p>
       </div>
 
-      <div className="flex flex-col md:flex-row w-full gap-6">
+      <div style={styles.mainLayout}>
         
         {/* Simulation Area */}
-        <div className="relative flex-1 bg-white rounded-lg shadow-inner border border-slate-200 h-80 overflow-hidden">
-          <svg viewBox="-300 -50 600 400" className="w-full h-full">
-            {/* Ceiling */}
+        <div style={styles.simBox}>
+          <svg viewBox="-300 -50 600 400" style={{ width: '100%', height: '100%' }}>
             <line x1="-100" y1="0" x2="100" y2="0" stroke="#334155" strokeWidth="4" strokeLinecap="round" />
-            {/* String */}
-            <line x1={pivotX} y1={pivotY} x2={bobX} y2={bobY} stroke="#94a3b8" strokeWidth="3" />
-            {/* Bob */}
+            <line x1="0" y1="0" x2={bobX} y2={bobY} stroke="#94a3b8" strokeWidth="3" />
             <circle cx={bobX} cy={bobY} r="25" fill="#3b82f6" stroke="#1e40af" strokeWidth="2" />
           </svg>
           
-          {/* Angle Indicator (Only show when paused to avoid clutter) */}
           {!isPlaying && (
-            <div className="absolute top-4 right-4 bg-slate-100 px-3 py-1 rounded-full text-xs font-mono text-slate-500 border border-slate-200">
+            <div style={{
+              position: 'absolute', top: '16px', right: '16px',
+              backgroundColor: '#f1f5f9', padding: '4px 12px',
+              borderRadius: '999px', fontSize: '12px', color: '#64748b',
+              border: '1px solid #e2e8f0', fontFamily: 'monospace'
+            }}>
               {Math.round(sliderValue)}°
             </div>
           )}
         </div>
 
         {/* Graphs Area */}
-        <div className="w-full md:w-64 flex flex-col justify-center gap-4 p-4 bg-white rounded-lg shadow-sm border border-slate-200">
+        <div style={styles.graphBox}>
           {/* Total Energy */}
-          <div className="flex flex-col gap-1">
-            <div className="flex justify-between text-xs font-bold text-slate-700 uppercase tracking-wider">
+          <div>
+            <div style={styles.labelRow}>
               <span>Total</span>
               <span>{currentTotal?.toFixed(1)} J</span>
             </div>
-            <div className="w-full h-8 bg-slate-100 rounded-md overflow-hidden border border-slate-200 relative">
-               {/* Reference Line */}
-               <div className="absolute top-0 bottom-0 border-r-2 border-dashed border-slate-300 z-10" style={{ left: `${getBarWidth(currentTotal)}%` }}></div>
-              <div 
-                className="h-full bg-green-500 transition-all duration-75 ease-linear"
-                style={{ width: `${getBarWidth(currentTotal)}%` }}
-              />
+            <div style={styles.barContainer}>
+               <div style={{
+                 position: 'absolute', top: 0, bottom: 0, 
+                 borderRight: '2px dashed #cbd5e1', zIndex: 10,
+                 left: `${getBarWidth(currentTotal)}%` 
+               }}></div>
+              <div style={{ ...styles.bar, width: `${getBarWidth(currentTotal)}%`, backgroundColor: '#22c55e' }} />
             </div>
           </div>
 
           {/* Kinetic Energy */}
-          <div className="flex flex-col gap-1">
-            <div className="flex justify-between text-xs font-bold text-slate-700 uppercase tracking-wider">
+          <div>
+            <div style={styles.labelRow}>
               <span>Kinetic</span>
               <span>{currentKE.toFixed(1)} J</span>
             </div>
-            <div className="w-full h-8 bg-slate-100 rounded-md overflow-hidden border border-slate-200">
-              <div 
-                className="h-full bg-red-500 transition-all duration-75 ease-linear"
-                style={{ width: `${getBarWidth(currentKE)}%` }}
-              />
+            <div style={styles.barContainer}>
+              <div style={{ ...styles.bar, width: `${getBarWidth(currentKE)}%`, backgroundColor: '#ef4444' }} />
             </div>
           </div>
 
           {/* Potential Energy */}
-          <div className="flex flex-col gap-1">
-            <div className="flex justify-between text-xs font-bold text-slate-700 uppercase tracking-wider">
+          <div>
+            <div style={styles.labelRow}>
               <span>Potential</span>
               <span>{currentPE.toFixed(1)} J</span>
             </div>
-            <div className="w-full h-8 bg-slate-100 rounded-md overflow-hidden border border-slate-200">
-              <div 
-                className="h-full bg-blue-500 transition-all duration-75 ease-linear"
-                style={{ width: `${getBarWidth(currentPE)}%` }}
-              />
+            <div style={styles.barContainer}>
+              <div style={{ ...styles.bar, width: `${getBarWidth(currentPE)}%`, backgroundColor: '#3b82f6' }} />
             </div>
           </div>
         </div>
       </div>
 
       {/* Control Panel */}
-      <div className="w-full mt-6 p-4 bg-white rounded-lg border border-slate-200 flex flex-col gap-4">
+      <div style={styles.controls}>
         
-        {/* Slider */}
-        <div className="flex flex-col gap-2">
-          <label htmlFor="angle-slider" className="text-sm font-semibold text-slate-700">Set Initial Angle</label>
+        <div style={styles.sliderContainer}>
+          <label htmlFor="angle-slider" style={styles.sliderLabel}>Set Initial Angle</label>
           <input
             id="angle-slider"
             type="range"
@@ -261,42 +371,35 @@ const PendulumSimulation = () => {
             value={sliderValue}
             onChange={handleSliderChange}
             disabled={isPlaying}
-            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={styles.slider}
           />
-          <div className="flex justify-between text-xs text-slate-400 font-mono">
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
             <span>-90°</span>
             <span>0°</span>
             <span>+90°</span>
           </div>
         </div>
 
-        {/* Buttons */}
-        <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-            <div className="flex gap-3">
-                <button
-                    onClick={() => setIsPlaying(!isPlaying)}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-lg text-white font-bold shadow-sm transition-all active:scale-95 ${isPlaying ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}
-                >
+        <div style={styles.buttonRow}>
+            <div style={styles.btnGroup}>
+                <button onClick={() => setIsPlaying(!isPlaying)} style={styles.playBtn}>
                     {isPlaying ? <><Pause size={20} /> Pause</> : <><Play size={20} /> Play</>}
                 </button>
 
-                <button
-                    onClick={handleReset}
-                    className="flex items-center gap-2 px-4 py-3 bg-white border-2 border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-colors font-semibold active:scale-95"
-                >
+                <button onClick={handleReset} style={styles.resetBtn}>
                     <RefreshCw size={20} /> Reset
                 </button>
             </div>
 
-            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
+            <div style={styles.checkboxWrapper}>
                 <input 
                     type="checkbox" 
                     id="slowmo" 
                     checked={slowMo} 
                     onChange={(e) => setSlowMo(e.target.checked)}
-                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
                 />
-                <label htmlFor="slowmo" className="text-sm text-slate-700 font-medium cursor-pointer select-none">Slow Motion</label>
+                <label htmlFor="slowmo" style={{ fontSize: '14px', color: '#334155', cursor: 'pointer' }}>Slow Motion</label>
             </div>
         </div>
       </div>
@@ -304,6 +407,5 @@ const PendulumSimulation = () => {
     </div>
   );
 };
-
 
 export default PendulumSimulation;
