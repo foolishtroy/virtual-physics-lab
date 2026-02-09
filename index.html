@@ -3,304 +3,293 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FCI Diagnostic App</title>
+    <title>Physics Diagnostic</title>
     
-    <!-- 1. Load Tailwind CSS for styling -->
+    <!-- 1. Tailwind CSS (Styling) -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- 2. Load React and ReactDOM -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- 2. React & ReactDOM (The Core Engine) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     
-    <!-- 3. Load Recharts (for the graph) -->
-    <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
-    
-    <!-- 4. Load Babel (to translate React code in the browser) -->
+    <!-- 3. Babel (Translates code for the browser) -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
-        /* Smooth transitions for the progress bar */
-        .transition-width { transition: width 0.3s ease-in-out; }
+        body { background-color: #f8fafc; }
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800">
+<body>
 
-    <div id="root"></div>
+    <!-- If React fails to load, the user sees this message -->
+    <div id="root" class="flex items-center justify-center min-h-screen text-slate-500">
+        Loading App... (If this takes too long, refresh the page)
+    </div>
 
-    <!-- THE REACT APPLICATION CODE -->
     <script type="text/babel">
-        const { useState, useMemo } = React;
-        const { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip } = Recharts;
+        // --- SAFE GLOBALS ---
+        // We access React features directly from the window object to prevent errors
+        const { useState, useMemo, useEffect } = React;
 
-        // --- ICONS (Inlined as SVG components to avoid dependencies) ---
-        const CheckCircle = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-500"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
-        const XCircle = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-500"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>;
-        const ChevronRight = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>;
-        const RotateCcw = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 12"/><path d="M3 3v9h9"/></svg>;
-        const BookOpen = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>;
-        const Activity = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>;
+        // --- ICONS (Simple SVGs) ---
+        const Icons = {
+            Check: () => <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>,
+            X: () => <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>,
+            ArrowRight: () => <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>,
+            Refresh: () => <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+        };
 
         // --- DATA ---
         const QUESTIONS = [
             {
                 id: 1,
-                text: "Two metal balls are the same size but one weighs twice as much as the other. The balls are dropped from the roof of a single story building at the same instant of time. The time it takes the balls to reach the ground below will be:",
+                text: "Two metal balls are the same size but one weighs twice as much as the other. They are dropped from a roof at the same instant. The time it takes to reach the ground will be:",
                 options: [
-                    { id: 'A', text: "about half as long for the heavy ball as for the light ball." },
-                    { id: 'B', text: "about half as long for the light ball as for the heavy ball." },
-                    { id: 'C', text: "about the same for both balls." },
-                    { id: 'D', text: "considerably less for the heavy ball, but not necessarily half as long." },
-                    { id: 'E', text: "considerably less for the light ball, but not necessarily half as long." }
+                    { id: 'A', text: "Half as long for the heavy ball." },
+                    { id: 'B', text: "Half as long for the light ball." },
+                    { id: 'C', text: "About the same for both balls." },
+                    { id: 'D', text: "Considerably less for the heavy ball." },
+                    { id: 'E', text: "Considerably less for the light ball." }
                 ],
                 correctAnswer: 'C',
-                concepts: ["Gravity", "Kinematics"],
+                concept: "Gravity",
                 explanation: "Galileo's principle: In the absence of air resistance, all objects fall with the same acceleration regardless of mass."
             },
             {
                 id: 2,
-                text: "A stone dropped from the roof of a single story building to the surface of the earth:",
+                text: "A stone dropped from a roof to the earth:",
                 options: [
-                    { id: 'A', text: "reaches a maximum speed quite soon after release and then falls at a constant speed thereafter." },
-                    { id: 'B', text: "speeds up as it falls because the gravitational attraction gets considerably stronger as the stone gets closer to the earth." },
-                    { id: 'C', text: "speeds up because of an almost constant force of gravity acting upon it." },
-                    { id: 'D', text: "falls because of the natural tendency of all objects to rest on the surface of the earth." },
-                    { id: 'E', text: "falls because of the combined effects of the force of gravity pushing it downward and the force of the air pushing it downward." }
+                    { id: 'A', text: "Reaches max speed immediately then falls at constant speed." },
+                    { id: 'B', text: "Speeds up because gravity gets stronger closer to earth." },
+                    { id: 'C', text: "Speeds up because of a constant gravitational force." },
+                    { id: 'D', text: "Falls because of a natural tendency to rest." },
+                    { id: 'E', text: "Falls due to combined gravity and air pressure." }
                 ],
                 correctAnswer: 'C',
-                concepts: ["Gravity", "Newton's 2nd Law"],
-                explanation: "Gravity exerts a constant force (near Earth's surface), causing a constant acceleration. Constant acceleration means speed is always increasing."
+                concept: "Acceleration",
+                explanation: "Gravity exerts a constant force, causing constant acceleration (speeding up) the entire way down."
             },
             {
                 id: 3,
-                text: "A large truck collides head-on with a small compact car. During the collision:",
+                text: "A large truck collides head-on with a small car. During the collision:",
                 options: [
-                    { id: 'A', text: "the truck exerts a greater amount of force on the car than the car exerts on the truck." },
-                    { id: 'B', text: "the car exerts a greater amount of force on the truck than the truck exerts on the car." },
-                    { id: 'C', text: "neither exerts a force on the other, the car gets smashed simply because it gets in the way of the truck." },
-                    { id: 'D', text: "the truck exerts a force on the car but the car does not exert a force on the truck." },
-                    { id: 'E', text: "the truck exerts the same amount of force on the car as the car exerts on the truck." }
+                    { id: 'A', text: "The truck exerts more force on the car." },
+                    { id: 'B', text: "The car exerts more force on the truck." },
+                    { id: 'C', text: "Neither exerts force on the other." },
+                    { id: 'D', text: "The truck exerts force, the car does not." },
+                    { id: 'E', text: "They exert the same amount of force on each other." }
                 ],
                 correctAnswer: 'E',
-                concepts: ["Newton's 3rd Law"],
-                explanation: "Newton's 3rd Law: For every action, there is an equal and opposite reaction. The forces are identical in magnitude."
+                concept: "Newton's 3rd Law",
+                explanation: "Newton's 3rd Law: For every action, there is an equal and opposite reaction. The forces are identical."
             },
             {
                 id: 4,
-                text: "A heavy ball is attached to a string and swung in a circular path in a horizontal plane. At the point indicated in the diagram (imagine the string breaks), which path will the ball follow?",
+                text: "A ball is swung in a circle on a string. If the string breaks, which path will the ball follow?",
                 options: [
-                    { id: 'A', text: "A curved path outwards from the center." },
-                    { id: 'B', text: "A straight line tangent to the circle." },
-                    { id: 'C', text: "A straight line outwards from the center." },
-                    { id: 'D', text: "A curved path inwards towards the center." }
+                    { id: 'A', text: "Curved path outwards." },
+                    { id: 'B', text: "Straight line tangent to the circle." },
+                    { id: 'C', text: "Straight line outwards from center." },
+                    { id: 'D', text: "Curved path inwards." }
                 ],
                 correctAnswer: 'B',
-                concepts: ["Circular Motion", "Newton's 1st Law"],
-                explanation: "Once the centripetal force is removed, the object continues in a straight line due to inertia (Newton's 1st Law)."
+                concept: "Inertia",
+                explanation: "Without the string's force, the ball continues in a straight line due to inertia (Newton's 1st Law)."
             },
             {
                 id: 5,
-                text: "A boy throws a steel ball straight up. Consider the motion of the ball only after it has left the boy's hand but before it touches the ground. The forces acting on the ball are:",
+                text: "After a ball is thrown straight up (after leaving the hand), the forces acting on it are:",
                 options: [
-                    { id: 'A', text: "a downward force of gravity along with a steadily decreasing upward force." },
-                    { id: 'B', text: "a steadily decreasing upward force from the moment it leaves the hand until it reaches its highest point; on the way down there is a steadily increasing downward force of gravity." },
-                    { id: 'C', text: "an almost constant downward force of gravity along with an upward force that steadily decreases until the ball reaches its highest point." },
-                    { id: 'D', text: "an almost constant downward force of gravity only." },
-                    { id: 'E', text: "none of the above." }
+                    { id: 'A', text: "Gravity down, and a decreasing upward force." },
+                    { id: 'B', text: "Decreasing upward force only." },
+                    { id: 'C', text: "Gravity down and a constant upward force." },
+                    { id: 'D', text: "Gravity down only." },
+                    { id: 'E', text: "None of the above." }
                 ],
                 correctAnswer: 'D',
-                concepts: ["Projectile Motion", "Force Identification"],
-                explanation: "Once the ball leaves the hand, the only force acting on it is gravity (ignoring air resistance)."
+                concept: "Force Identification",
+                explanation: "Once it leaves the hand, the only force acting on it is gravity (ignoring air resistance)."
             }
         ];
 
-        // --- MAIN COMPONENT ---
-        function FCIApp() {
-            const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+        // --- APP COMPONENT ---
+        function App() {
+            const [index, setIndex] = useState(0);
             const [answers, setAnswers] = useState({});
+            const [submitted, setSubmitted] = useState(false);
             const [showResults, setShowResults] = useState(false);
-            const [isAnswerSubmitted, setIsAnswerSubmitted] = useState(false);
 
-            const currentQuestion = QUESTIONS[currentQuestionIndex];
-            const totalQuestions = QUESTIONS.length;
+            const question = QUESTIONS[index];
+            const isLast = index === QUESTIONS.length - 1;
 
-            const handleSelectOption = (optionId) => {
-                if (isAnswerSubmitted) return;
-                setAnswers(prev => ({ ...prev, [currentQuestion.id]: optionId }));
+            // Handle clicking an option
+            const handleOptionClick = (optId) => {
+                if (submitted) return;
+                setAnswers(prev => ({ ...prev, [question.id]: optId }));
             };
 
-            const handleSubmitAnswer = () => {
-                setIsAnswerSubmitted(true);
+            // Handle "Check Answer"
+            const handleCheck = () => {
+                setSubmitted(true);
             };
 
+            // Handle "Next"
             const handleNext = () => {
-                if (currentQuestionIndex < totalQuestions - 1) {
-                    setCurrentQuestionIndex(prev => prev + 1);
-                    setIsAnswerSubmitted(false);
-                } else {
+                if (isLast) {
                     setShowResults(true);
+                } else {
+                    setIndex(prev => prev + 1);
+                    setSubmitted(false);
                 }
             };
 
-            const diagnosticData = useMemo(() => {
-                const stats = {};
-                QUESTIONS.forEach(q => {
-                    q.concepts.forEach(concept => {
-                        if (!stats[concept]) stats[concept] = { total: 0, correct: 0 };
-                    });
-                });
+            // Calculate Results
+            const results = useMemo(() => {
+                let correctCount = 0;
+                const conceptStats = {};
 
                 QUESTIONS.forEach(q => {
-                    const userAnswer = answers[q.id];
-                    const isCorrect = userAnswer === q.correctAnswer;
-                    q.concepts.forEach(concept => {
-                        stats[concept].total += 1;
-                        if (isCorrect) stats[concept].correct += 1;
-                    });
+                    const isCorrect = answers[q.id] === q.correctAnswer;
+                    if (isCorrect) correctCount++;
+                    
+                    if (!conceptStats[q.concept]) conceptStats[q.concept] = { total: 0, correct: 0 };
+                    conceptStats[q.concept].total++;
+                    if (isCorrect) conceptStats[q.concept].correct++;
                 });
 
-                return Object.keys(stats).map(concept => ({
-                    subject: concept,
-                    A: (stats[concept].correct / stats[concept].total) * 100,
-                    fullMark: 100
-                }));
-            }, [answers]);
+                return {
+                    score: correctCount,
+                    percentage: Math.round((correctCount / QUESTIONS.length) * 100),
+                    concepts: Object.entries(conceptStats).map(([name, stats]) => ({
+                        name,
+                        percent: Math.round((stats.correct / stats.total) * 100)
+                    }))
+                };
+            }, [answers, showResults]);
 
-            const calculateTotalScore = () => {
-                let correct = 0;
-                QUESTIONS.forEach(q => {
-                    if (answers[q.id] === q.correctAnswer) correct++;
-                });
-                return correct;
-            };
-
-            const resetQuiz = () => {
-                setAnswers({});
-                setCurrentQuestionIndex(0);
-                setShowResults(false);
-                setIsAnswerSubmitted(false);
-            };
-
+            // --- RENDER: RESULTS SCREEN ---
             if (showResults) {
-                const score = calculateTotalScore();
-                const percentage = Math.round((score / totalQuestions) * 100);
-
                 return (
-                    <div className="min-h-screen bg-slate-50 p-4 font-sans text-slate-800">
-                        <div className="max-w-md mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
-                            <div className="bg-indigo-600 p-6 text-white text-center">
-                                <h1 className="text-2xl font-bold mb-2">Diagnostic Results</h1>
-                                <div className="text-5xl font-bold mb-2">{percentage}%</div>
-                                <p className="text-indigo-100">You got {score} out of {totalQuestions} correct</p>
-                            </div>
-
-                            <div className="p-6">
-                                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                                    <Activity /> Concept Mastery
-                                </h2>
-                                
-                                <div className="h-64 w-full mb-6 text-xs">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <RadarChart cx="50%" cy="50%" outerRadius="80%" data={diagnosticData}>
-                                            <PolarGrid />
-                                            <PolarAngleAxis dataKey="subject" />
-                                            <PolarRadiusAxis angle={30} domain={[0, 100]} />
-                                            <Radar name="Mastery" dataKey="A" stroke="#4f46e5" fill="#4f46e5" fillOpacity={0.6} />
-                                            <Tooltip />
-                                        </RadarChart>
-                                    </ResponsiveContainer>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <h3 className="font-semibold text-slate-700">Review:</h3>
-                                    {QUESTIONS.map((q, idx) => (
-                                        <div key={q.id} className="border-b border-slate-100 pb-4 last:border-0">
-                                            <div className="flex items-start gap-3">
-                                                <div className="mt-1">
-                                                    {answers[q.id] === q.correctAnswer ? <CheckCircle /> : <XCircle />}
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-medium text-slate-900">Q{idx + 1}: {q.concepts.join(", ")}</p>
-                                                    {answers[q.id] !== q.correctAnswer && (
-                                                        <p className="text-xs text-slate-500 mt-1">
-                                                            Correct: {q.correctAnswer} | Your Answer: {answers[q.id] || "Skipped"}
-                                                        </p>
-                                                    )}
-                                                </div>
+                    <div className="max-w-md mx-auto mt-10 bg-white rounded-xl shadow-lg overflow-hidden fade-in m-4">
+                        <div className="bg-slate-800 p-8 text-center text-white">
+                            <h1 className="text-3xl font-bold">{results.percentage}%</h1>
+                            <p className="text-slate-300 mt-2">You got {results.score} out of {QUESTIONS.length} correct</p>
+                        </div>
+                        
+                        <div className="p-6 space-y-6">
+                            <div>
+                                <h3 className="font-bold text-slate-700 mb-4">Concept Mastery</h3>
+                                <div className="space-y-3">
+                                    {results.concepts.map(c => (
+                                        <div key={c.name}>
+                                            <div className="flex justify-between text-sm mb-1">
+                                                <span>{c.name}</span>
+                                                <span className="font-bold">{c.percent}%</span>
+                                            </div>
+                                            <div className="w-full bg-slate-100 rounded-full h-2.5">
+                                                <div 
+                                                    className="bg-indigo-600 h-2.5 rounded-full" 
+                                                    style={{ width: `${c.percent}%` }}
+                                                ></div>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
-
-                                <button onClick={resetQuiz} className="w-full mt-8 bg-slate-800 text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-slate-700 transition-colors">
-                                    <RotateCcw /> Retake Quiz
-                                </button>
                             </div>
+
+                            <button 
+                                onClick={() => window.location.reload()} 
+                                className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold flex items-center justify-center transition-colors"
+                            >
+                                <Icons.Refresh /> Retake Quiz
+                            </button>
                         </div>
                     </div>
                 );
             }
 
+            // --- RENDER: QUIZ SCREEN ---
             return (
-                <div className="min-h-screen bg-slate-50 p-4 font-sans text-slate-800 flex items-center justify-center">
-                    <div className="w-full max-w-md bg-white rounded-xl shadow-lg overflow-hidden flex flex-col h-[85vh]">
-                        <div className="bg-white border-b border-slate-100 p-4 flex justify-between items-center">
-                            <div className="flex items-center gap-2 text-indigo-600 font-bold">
-                                <BookOpen />
-                                <span>FCI Practice</span>
-                            </div>
-                            <div className="text-sm font-medium text-slate-500">
-                                {currentQuestionIndex + 1} / {totalQuestions}
-                            </div>
+                <div className="min-h-screen flex items-center justify-center p-4">
+                    <div className="w-full max-w-lg bg-white rounded-xl shadow-xl overflow-hidden flex flex-col" style={{ minHeight: '500px' }}>
+                        
+                        {/* Header */}
+                        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <span className="font-bold text-slate-700">Physics Quiz</span>
+                            <span className="text-sm text-slate-500">Q{index + 1} of {QUESTIONS.length}</span>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-6">
-                            <div className="w-full bg-slate-100 h-2 rounded-full mb-6">
-                                <div className="bg-indigo-600 h-2 rounded-full transition-width" style={{ width: `${((currentQuestionIndex + 1) / totalQuestions) * 100}%` }}></div>
-                            </div>
+                        {/* Progress Bar */}
+                        <div className="w-full bg-slate-100 h-1">
+                            <div 
+                                className="bg-indigo-600 h-1 transition-all duration-300" 
+                                style={{ width: `${((index + 1) / QUESTIONS.length) * 100}%` }}
+                            ></div>
+                        </div>
 
-                            <h2 className="text-lg font-medium leading-relaxed mb-6 text-slate-800">{currentQuestion.text}</h2>
+                        {/* Content */}
+                        <div className="p-6 flex-1 overflow-y-auto">
+                            <h2 className="text-lg font-medium text-slate-800 mb-6 leading-relaxed">
+                                {question.text}
+                            </h2>
 
                             <div className="space-y-3">
-                                {currentQuestion.options.map((option) => {
-                                    const isSelected = answers[currentQuestion.id] === option.id;
-                                    const isCorrect = option.id === currentQuestion.correctAnswer;
+                                {question.options.map(opt => {
+                                    const isSelected = answers[question.id] === opt.id;
+                                    const isCorrect = opt.id === question.correctAnswer;
                                     
-                                    let buttonStyle = "border-slate-200 hover:bg-slate-50";
-                                    if (isSelected && !isAnswerSubmitted) {
-                                        buttonStyle = "border-indigo-600 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-600";
-                                    } else if (isAnswerSubmitted) {
-                                        if (isCorrect) buttonStyle = "border-green-500 bg-green-50 text-green-800 ring-1 ring-green-500";
-                                        else if (isSelected && !isCorrect) buttonStyle = "border-red-300 bg-red-50 text-red-800 ring-1 ring-red-300";
-                                        else buttonStyle = "border-slate-100 text-slate-400";
+                                    let btnClass = "border-slate-200 hover:bg-slate-50";
+                                    
+                                    if (submitted) {
+                                        if (isCorrect) btnClass = "bg-green-50 border-green-500 text-green-800";
+                                        else if (isSelected) btnClass = "bg-red-50 border-red-300 text-red-800";
+                                        else btnClass = "opacity-50 border-slate-100";
+                                    } else if (isSelected) {
+                                        btnClass = "border-indigo-600 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-600";
                                     }
 
                                     return (
-                                        <button key={option.id} onClick={() => handleSelectOption(option.id)} disabled={isAnswerSubmitted} className={`w-full text-left p-4 rounded-lg border transition-all duration-200 ${buttonStyle}`}>
+                                        <button
+                                            key={opt.id}
+                                            onClick={() => handleOptionClick(opt.id)}
+                                            disabled={submitted}
+                                            className={`w-full text-left p-4 rounded-lg border transition-all ${btnClass}`}
+                                        >
                                             <div className="flex gap-3">
-                                                <span className="font-bold min-w-[1.5rem]">{option.id}.</span>
-                                                <span className="text-sm">{option.text}</span>
+                                                <span className="font-bold">{opt.id}.</span>
+                                                <span>{opt.text}</span>
                                             </div>
                                         </button>
                                     );
                                 })}
                             </div>
 
-                            {isAnswerSubmitted && (
-                                <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-100 text-sm text-blue-800">
-                                    <p className="font-bold mb-1 flex items-center gap-2"><BookOpen /> Explanation:</p>
-                                    {currentQuestion.explanation}
+                            {submitted && (
+                                <div className="mt-6 p-4 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800 fade-in">
+                                    <p className="font-bold mb-1">Explanation:</p>
+                                    {question.explanation}
                                 </div>
                             )}
                         </div>
 
-                        <div className="p-4 border-t border-slate-100 bg-white">
-                            {!isAnswerSubmitted ? (
-                                <button onClick={handleSubmitAnswer} disabled={!answers[currentQuestion.id]} className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors">
+                        {/* Footer */}
+                        <div className="p-4 border-t border-slate-100 bg-slate-50">
+                            {!submitted ? (
+                                <button 
+                                    onClick={handleCheck}
+                                    disabled={!answers[question.id]}
+                                    className="w-full py-3 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                >
                                     Check Answer
                                 </button>
                             ) : (
-                                <button onClick={handleNext} className="w-full bg-slate-800 text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-slate-700 transition-colors">
-                                    {currentQuestionIndex < totalQuestions - 1 ? 'Next Question' : 'See Results'} <ChevronRight />
+                                <button 
+                                    onClick={handleNext}
+                                    className="w-full py-3 bg-slate-800 text-white rounded-lg font-bold hover:bg-slate-700 flex items-center justify-center transition-colors"
+                                >
+                                    {isLast ? "See Results" : "Next Question"} <Icons.ArrowRight />
                                 </button>
                             )}
                         </div>
@@ -309,8 +298,9 @@
             );
         }
 
+        // --- MOUNT THE APP ---
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<FCIApp />);
+        root.render(<App />);
     </script>
 </body>
 </html>
